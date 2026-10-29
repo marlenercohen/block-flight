@@ -1,0 +1,12 @@
+// Instruction text (data only). Explains the goal, that the click position matters, the familiarity rule (new -> bottom, familiar -> top) and that colour carries a hint,
+// WITHOUT saying what the colour hint means, that the colour rule can change, or when. Practice blocks use the neutral middle colour and a separate image pool.
+export const INTRO_CARD = { id: 'intro', title: 'Block Flight', text: 'In this game you will launch blocks by clicking on them.\n\nEach block has a picture on its front. You get ONE click per block, and then you watch what happens. Your goal is to make every block travel as far as possible.\n\nFirst, a short practice.', button: 'Start' };
+
+/** Each step: a card; steps with `practice: true` are followed by one practice block. image: index into the tutorial pool. */
+export const TUTORIAL_STEPS = [
+  { id: 'goal', title: 'Welcome!', text: 'A single block will appear on a long platform. Click its picture once. The block will fly away from you.\n\nThe farther it goes, the better your click was.', button: 'Try it', practice: true, image: 0, hint: 'Click the picture.' },
+  { id: 'location', title: 'Where you click matters', text: 'The block flies farther when you click in a good place on its picture, and not far at all when you click in a poor place.\n\nThis time, try a different spot and watch what happens.', button: 'Try it', practice: true, image: 1, hint: 'Try a different spot on the picture.' },
+  { id: 'novel', title: 'New pictures', text: 'The first time you see a picture, it is NEW. For a new picture, clicking toward the BOTTOM of the picture works best.', button: 'Try it', practice: true, image: 2, role: 'novel', hint: 'A new picture: try clicking near the bottom of it.' },
+  { id: 'familiar', title: 'Familiar pictures', text: 'The same picture is back! A picture you have already seen is FAMILIAR. For a familiar picture, clicking toward the TOP of the picture works best.', button: 'Try it', practice: true, image: 2, role: 'familiar', hint: 'A familiar picture: try clicking near the top of it.' },
+  { id: 'color', title: 'One more hint', text: 'The color of a block also gives you a hint about where to click. You will discover how as you play.\n\nWhere you click on a block affects how far it flies. There are patterns that can help you figure out where to click. These patterns generally stay the same across many blocks, but they may sometimes change. Pay attention to what works, and use what you learn to make the blocks fly as far as you can.\n\nThe real game starts now.', button: 'Begin' },
+];

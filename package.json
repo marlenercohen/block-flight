@@ -1,0 +1,9 @@
+{
+  "name": "block-flight",
+  "version": "0.1.0",
+  "description": "Block Flight: one block, one click per trial; learning of colour->horizontal and familiarity->vertical rules from physical feedback",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "check": "node tools/checks.mjs" },
+  "dependencies": { "@dimforge/rapier3d-compat": "^0.21.0", "three": "^0.186.1", "vite": "^8.3.4" },
+  "private": true
+}
