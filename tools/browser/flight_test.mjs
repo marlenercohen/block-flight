@@ -1,5 +1,5 @@
 // End-to-end browser test of Block Flight. Needs puppeteer-core, Chrome and `npm run dev` on 5175 (or URL=...). Run: node tools/browser/flight_test.mjs
-// Plays the instructions (Back / Next), 4 practice blocks and an 8-trial session (colour rule reversed after trial 4) with scripted good / poor / double / off-block clicks and one missed trial,
+// Plays the instructions (Back / Next), 4 practice blocks and an 8-trial session (colour rule switching after trials 2, 4 and 6) with scripted good / poor / double / off-block clicks and one missed trial,
 // then checks the exported JSON and CSV against the rules and the hit-strength function.
 import puppeteer from 'puppeteer-core';
 import fs from 'fs'; import os from 'os'; import path from 'path';
@@ -11,7 +11,7 @@ const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args
 const p = await b.newPage(); await p.setViewport({ width: 1100, height: 700 });
 const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 const cdp = await p.createCDPSession(); await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: DL });
-await p.goto(`${BASE}?trials=8&reversal=4&seed=11&blank=150&observe=1500&rest=200&maxWait=3500`, { waitUntil: 'domcontentloaded' }); await sleep(1500);
+await p.goto(`${BASE}?trials=8&switches=2,4,6&seed=11&blank=150&observe=1500&rest=200&maxWait=3500`, { waitUntil: 'domcontentloaded' }); await sleep(1500);
 const ev = f => p.evaluate(f);
 const vis = sel => ev(`(()=>{const e=document.querySelector('${sel}'); if(!e) return false; const r=e.getBoundingClientRect(); return !e.classList.contains('hidden') && getComputedStyle(e).display!=='none' && r.width>0 && r.height>0})()`);
 const waitFor = async (fn, ms = 20000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await sleep(30); } return false; };
@@ -21,7 +21,7 @@ const next = async () => { await p.click('#cardBtn'); await sleep(200); }, back 
 const waitBlock = () => waitFor(async () => (await state()) === 'waiting', 8000);
 const clickFace = async (u, v) => { const q = await ev(`window.__flight.facePoint(${u},${v})`); await p.mouse.click(q.x, q.y); };
 const optimum = () => ev(() => window.__log.active.optimal);
-const clamp = x => Math.min(0.96, Math.max(0.04, x));
+const clamp = x => Math.min(0.97, Math.max(0.03, x));
 const ntr = () => ev(() => window.__log.data.trials.length);
 // ---- instructions ----
 await waitFor(() => vis('#card'), 30000);   // images + physics engine load first (slower on the production build)
@@ -42,8 +42,8 @@ await next();
 const t0 = Date.now(); const planned = [];
 for (let t = 1; t <= 8; t++) {
   ok(await waitBlock(), `trial ${t}: block appears`); const opt = await optimum(), info = await ev(() => ({ n: window.__log.active.trialNumber, ph: window.__log.active.colorRulePhase }));
-  let u = opt.u, v = opt.v;
-  if (t === 2) u = clamp(opt.u + 0.15); if (t === 3) v = clamp(opt.v + 0.3); if (t === 6) u = clamp(1 - opt.u); if (t === 7) { u = 0.05; v = 0.95; }
+  let u = clamp(opt.u), v = clamp(opt.v);
+  if (t === 2) u = clamp(opt.u + 0.15); if (t === 3) v = clamp(opt.v === 0 ? 0.5 : 0.5); if (t === 6) u = clamp(1 - opt.u); if (t === 7) { u = 0.05; v = 0.95; }
   if (t === 8) { planned.push('no_click'); await waitFor(async () => (await ev(() => window.__log.data.trials.at(-1).result)) === 'no_click', 8000); continue; }
   if (t === 3) { await p.mouse.click(60, 400); await sleep(100); }            // off the block: ignored, the trial goes on
   await clickFace(u, v); await sleep(120);
@@ -55,7 +55,8 @@ await p.click('#endJson'); await sleep(600); await p.click('#endCsv'); await sle
 const jf = fs.readdirSync(DL).find(f => f.endsWith('.json')), cf = fs.readdirSync(DL).find(f => f.endsWith('_trials.csv'));
 ok(jf && cf, 'JSON and CSV downloads'); const J = JSON.parse(fs.readFileSync(path.join(DL, jf), 'utf8')), E = J.trials.filter(t => t.phase === 'experiment'), T = J.trials.filter(t => t.phase === 'tutorial');
 ok(T.length === 4 && E.length === 8 && E.every((t, i) => t.trialNumber === i + 1), 'exported: 4 practice trials and 8 experimental trials numbered 1-8');
-ok(E.map(t => t.colorRulePhase[0]).join('') === 'iiiirrrr' && J.session.experimentConfig.colorRule.reversalAfterTrial === 4, `colour rule phase per trial: ${E.map(t => t.colorRulePhase[0]).join('')} (reversal after trial 4)`);
+ok(E.map(t => t.colorRulePhase[0]).join('') === 'iirriirr' && E.map(t => t.blockNumber).join('') === '11223344' && E.map(t => t.trialInBlock).join('') === '12121212' && E.every(t => t.switchPoints.join() === '2,4,6'), `colour mapping per trial: ${E.map(t => t.colorRulePhase[0]).join('')} (i = original, r = mirrored), block numbers ${E.map(t => t.blockNumber).join('')}: switches after trials 2, 4, 6`);
+ok(J.session.experimentConfig.colorRule.switchPoints.join() === '2,4,6' && J.session.experimentConfig.colorRule.blocks.map(b => `${b.block}:${b.firstTrial}-${b.lastTrial}:${b.mapping[0]}`).join(' ') === '1:1-2:i 2:3-4:r 3:5-6:i 4:7-8:r' && T.every(t => t.blockNumber === 0 && t.colorRulePhase === 'initial'), 'session config lists the blocks and mappings; practice trials are block 0, original mapping');
 const C = E.filter(t => t.click); ok(C.length === 7 && E[7].result === 'no_click' && E[7].click === null && E.slice(0, 7).every(t => t.result === 'completed'), 'seven clicked trials and one timed-out trial (no_click) logged');
 let bad = 0; for (const t of C) { const c = t.click, s = hitStrength({ cue: t.cue, familiarity: t.image.familiarity, u: c.u, v: c.v, phase: t.colorRulePhase });
   if (Math.abs(s.multiplier - c.multiplier) > 2e-4 || Math.abs(s.optimalU - c.optimalU) > 2e-4 || Math.abs(s.optimalV - c.optimalV) > 2e-4 || Math.abs(c.horizontalError - (c.u - c.optimalU)) > 3e-4 || Math.abs(c.verticalError - (c.v - c.optimalV)) > 3e-4 || Math.abs(c.impulse - 3.2 * c.multiplier) > 2e-3 || Math.abs(c.absHorizontalError - Math.abs(c.horizontalError)) > 1e-4 || Math.abs(t.optimal.u - c.optimalU) > 1e-4) bad++; }
@@ -64,8 +65,8 @@ ok(C.every(t => t.outcome && ['dx', 'dy', 'dz', 'displacement', 'distanceAway', 
 const rank = a => { const idx = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]); const r = Array(a.length); idx.forEach(([, i], k) => { r[i] = k; }); return r; }, rho = (x, y) => { const rx = rank(x), ry = rank(y), n = x.length, m = (n - 1) / 2; let sxy = 0, sxx = 0, syy = 0; for (let i = 0; i < n; i++) { sxy += (rx[i] - m) * (ry[i] - m); sxx += (rx[i] - m) ** 2; syy += (ry[i] - m) ** 2; } return sxy / Math.sqrt(sxx * syy); };
 const rr = rho(C.map(t => t.click.multiplier), C.map(t => t.outcome.distanceAway)); ok(rr > 0.9, `distance travelled follows the hit strength (Spearman rho ${rr.toFixed(2)} across ${C.length} trials: multipliers ${C.map(t => t.click.multiplier.toFixed(2)).join(', ')} -> distances ${C.map(t => t.outcome.distanceAway.toFixed(2)).join(', ')} m)`);
 ok(E[1].outcome.clicksIgnoredAfterLaunch >= 1 && Math.abs(E[1].click.impulse - 3.2 * E[1].click.multiplier) < 2e-3 && E[2].ignoredClicks.length === 1 && E[2].ignoredClicks[0].reason === 'not_on_block' && E[2].click.ignoredClicksBefore === 1, 'one click only: a second click during the flight was ignored (and counted), an off-block click did not use up the trial');
-ok(E[4].colorRulePhase === 'reversed' && Math.abs(E[4].click.optimalU - (1 - ((c => c)(E[4].cue) * 0.6 + 0.2))) < 1e-3 && C.filter(t => t.colorRulePhase === 'reversed').every(t => Math.abs(t.click.optimalU - (0.8 - 0.6 * t.cue)) < 1e-3) && C.filter(t => t.colorRulePhase === 'initial').every(t => Math.abs(t.click.optimalU - (0.2 + 0.6 * t.cue)) < 1e-3), 'optimal horizontal position follows the colour cue in the initial phase and is mirrored after the reversal; the vertical optimum follows familiarity');
-ok(C.every(t => Math.abs(t.click.optimalV - (t.image.familiarity === 'familiar' ? 0.8 : 0.2)) < 1e-6), 'vertical optimum 0.8 for familiar, 0.2 for novel images in both phases');
+ok(C.filter(t => t.colorRulePhase === 'reversed').every(t => Math.abs(t.click.optimalU - (0.8 - 0.6 * t.cue)) < 1e-3) && C.filter(t => t.colorRulePhase === 'initial').every(t => Math.abs(t.click.optimalU - (0.2 + 0.6 * t.cue)) < 1e-3) && C.some(t => t.blockNumber === 3), 'optimal horizontal position follows the colour cue in blocks 1 and 3 and is mirrored in blocks 2 and 4 (all switches take effect)');
+ok(C.every(t => t.click.optimalV === (t.image.familiarity === 'familiar' ? 1 : 0) && t.optimal.v === t.click.optimalV), 'vertical optimum is the top edge (1) for familiar and the bottom edge (0) for novel pictures in every block');
 const imgs = {}; for (const t of E) (imgs[t.image.imageId] ??= []).push(t); ok(Object.values(imgs).every(a => a.length <= 2 && a[0].image.familiarity === 'novel' && (a.length === 1 || (a[1].image.familiarity === 'familiar' && a[1].image.previousTrial === a[0].trialNumber && a[1].image.lagTrials === a[1].trialNumber - a[0].trialNumber))), 'image identity, familiarity, presentation number, previous trial and lag are logged consistently');
 ok(E.every(t => t.optimal && typeof t.cue === 'number' && /^#[0-9a-f]{6}$/.test(t.colorHex) && t.stimulusOnsetSessionMs > 0) && C.every(t => t.click.reactionTimeMs > 0 && t.click.screen && t.click.local), 'timing, cue, colour, optimum and click position present on every trial');
 const nav = J.session.instructionNavigation; ok(nav.length >= 12 && nav.filter(x => x.action === 'back').length === 4, `instruction navigation logged (${nav.length} moves, ${nav.filter(x => x.action === 'back').length} Back)`);

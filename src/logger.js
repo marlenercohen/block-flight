@@ -4,7 +4,8 @@
 // JSON layout (schema blockflight-log/1): { schema, session: {...}, trials: [ trial ], archivedSessions: [...], exportedAt }
 //   session: sessionId, startedAt, appVersion, device info, inputObserved, plan (seed, stats, per-trial image/cue/role), experimentConfig (rules, hit-strength parameters, launch physics,
 //            timing, session settings), instructionNavigation (Next/Back moves on the instruction cards)
-//   trial:   phase ('tutorial' | 'experiment'), trialNumber (experimental trials 1..N; tutorial trials have null and tutorialTrialNumber), colorRulePhase ('initial' | 'reversed'),
+//   trial:   phase ('tutorial' | 'experiment'), trialNumber (experimental trials 1..N; tutorial trials have null and tutorialTrialNumber), colorRulePhase ('initial' | 'reversed' = the colour mapping active on this trial),
+//            blockNumber (1.. = stretch of trials between colour-rule switches; 0 for practice) and trialInBlock, switchPoints (all configured switch trials),
 //            image {imageId, presentationNumber, familiarity, previousTrial, lagTrials, interveningTrials, interveningDistinctImages, planned...}, cue, colorHex,
 //            optimal {u, v} for THIS trial (colour rule phase and familiarity applied), click {...} (null if no click), outcome {...} (physical result), result ('completed' | 'no_click' | 'abandoned')
 //   click:   time, screen position, face coordinates u (0 left .. 1 right) and v (0 bottom .. 1 top) of the click on the picture face, signed and absolute errors from the optimum,
@@ -103,7 +104,7 @@ export class Logger {
 
   /** One row per trial (flattened). */
   csv() {
-    const cols = ['sessionId', 'trialId', 'phase', 'trialNumber', 'tutorialTrialNumber', 'trialIndexOverall', 'colorRulePhase', 'imageId', 'familiarity', 'presentationNumber', 'previousTrial', 'lagTrials', 'interveningTrials', 'interveningDistinctImages',
+    const cols = ['sessionId', 'trialId', 'phase', 'trialNumber', 'tutorialTrialNumber', 'trialIndexOverall', 'colorRulePhase', 'blockNumber', 'trialInBlock', 'imageId', 'familiarity', 'presentationNumber', 'previousTrial', 'lagTrials', 'interveningTrials', 'interveningDistinctImages',
       'cue', 'colorHex', 'optimalU', 'optimalV', 'result', 'stimulusOnsetSessionMs', 'reactionTimeMs', 'ignoredClicks', 'clickU', 'clickV', 'horizontalError', 'verticalError', 'absHorizontalError', 'absVerticalError', 'gH', 'gV', 'multiplier', 'impulse', 'launchSpeed',
       'displacement', 'distanceAway', 'dx', 'dy', 'dz', 'netRotationDeg', 'rotationPathDeg', 'peakHeight', 'pathLength', 'airborneS', 'timeToRestS', 'leftPlatform', 'durationMs'];
     const row = t => ({ ...t, ...t.image, optimalU: t.optimal?.u, optimalV: t.optimal?.v, ignoredClicks: t.ignoredClicks.length, clickU: t.click?.u, clickV: t.click?.v, reactionTimeMs: t.click?.reactionTimeMs,

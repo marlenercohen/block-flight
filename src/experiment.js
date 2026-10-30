@@ -20,17 +20,24 @@ export function colorForCue(c) {
 }
 /** Colour rule phase: 'initial' = mapping above; 'reversed' = mirrored (blue 0.8 ... red 0.2). */
 export function preferredXForCue(c, phase = 'initial') { const [a, b, t] = interp(CUE.preferredXStops, 'cue', c); const x = lerp(a.x, b.x, t); return phase === 'reversed' ? 1 - x : x; }
-/** Phase of trial n (1-based): initial up to and including `reversalAfterTrial`, reversed after it. Practice trials (n = null) are always initial. */
-export const ruleForTrial = (n, reversalAfterTrial) => (reversalAfterTrial != null && n != null && n > reversalAfterTrial ? 'reversed' : 'initial');
+/** Switch points = trial numbers AFTER which the colour mapping flips (e.g. [50, 100, 150]: trials 1-50 original, 51-100 reversed, 101-150 original, 151-200 reversed). Accepts a number, an array or null.
+ *  Returns the colour-rule phase of experimental trial n (1-based): 'initial' or 'reversed'. Practice trials (n = null) are always 'initial'. */
+const switchList = sp => [].concat(sp ?? []).filter(x => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+export const blockForTrial = (n, switchPoints) => (n == null ? 0 : 1 + switchList(switchPoints).filter(p => n > p).length);   // 1-based block number (0 for practice trials)
+export const ruleForTrial = (n, switchPoints) => (n != null && (blockForTrial(n, switchPoints) - 1) % 2 === 1 ? 'reversed' : 'initial');
+export const trialInBlock = (n, switchPoints) => { const sp = switchList(switchPoints).filter(p => n > p); return n - (sp.length ? sp.at(-1) : 0); };
 
-// ---- familiarity -> optimal vertical position (0 = bottom, 1 = top). The vertical rule never reverses. -------------
-export const FAMILIARITY = { novelPreferredY: 0.2, familiarPreferredY: 0.8 };
+// ---- familiarity -> optimal vertical position (0 = bottom edge, 1 = top edge). The vertical rule never reverses. ---------------
+// Novel pictures: the bottom edge is best; familiar pictures: the top edge is best (this is what the instructions say). Familiarity is a binary judgement, so the reward is broad near the correct
+// edge and falls smoothly toward the middle and the opposite edge: Gv = exp(-d^2 / (2 s^2)), d = distance from the correct edge, s = EFFECT.verticalWidth.
+export const FAMILIARITY = { novelPreferredY: 0, familiarPreferredY: 1 };
 export const preferredYForFamiliarity = f => (f === 'familiar' ? FAMILIARITY.familiarPreferredY : FAMILIARITY.novelPreferredY);
 
-// ---- hit strength (identical to the tower game's v2.2+ function; the horizontal penalty cut-off and penalty blocks do NOT exist here) ----
+// ---- hit strength: the tower game's multiplicative form; no horizontal cut-off, no penalty blocks ----
 //   multiplier = baseline + (peak - baseline) * Gh * Gv,  G(d, w) = exp(-d^2 / (2 w^2))   (d = click - optimum, normalised face units)
+//   horizontal: w = 0.15 around the colour-dependent optimum (unchanged from the tower game);  vertical: w = 0.35 around the correct edge (broad, see above)
 //   impulse = CONFIG.launch.impulse * multiplier
-export const EFFECT = { baseline: 0.25, peak: 2.2, horizontalWidth: 0.15, verticalWidth: 0.15 };
+export const EFFECT = { baseline: 0.25, peak: 2.2, horizontalWidth: 0.15, verticalWidth: 0.35 };
 export const bump = (d, width) => Math.exp(-(d * d) / (2 * width * width));
 
 /** u = horizontal position on the picture face (0 left .. 1 right), v = vertical (0 bottom .. 1 top). Returns every component needed for logging. */

@@ -2,7 +2,7 @@
 // The click position (u, v on the picture face) is turned into an impulse by the continuous hit-strength function (experiment.js); the impulse acts through the block's centre of mass,
 // so the movement is the only feedback and depends on the impulse strength alone.
 import { CONFIG } from './config.js';
-import { CUE, FAMILIARITY, EFFECT, IMAGES, TUTORIAL_IMAGES, NEUTRAL_CUE, colorForCue, preferredXForCue, ruleForTrial, hitStrength } from './experiment.js';
+import { CUE, FAMILIARITY, EFFECT, IMAGES, TUTORIAL_IMAGES, NEUTRAL_CUE, colorForCue, preferredXForCue, ruleForTrial, blockForTrial, trialInBlock, hitStrength } from './experiment.js';
 import { SESSION, applyUrlOverrides } from './session_config.js';
 import { initPhysics, FlightSim } from './physics.js';
 import { SceneView } from './scene.js';
@@ -26,12 +26,15 @@ const images = {};
 const load = (dir, id) => new Promise(res => { const im = new Image(); im.onload = () => { images[id] = im; res(); }; im.onerror = () => res(); im.src = `${import.meta.env.BASE_URL}${dir}/${id}.jpg`; });
 await Promise.all([...IMAGES.ids.map(id => load(IMAGES.dir, id)), ...TUTORIAL_IMAGES.ids.map(id => load(TUTORIAL_IMAGES.dir, id))]);
 
+/** one row per block between colour-rule switches: block number, first and last trial, active mapping */
+function blockTable() { const sp = [...SESSION.switchPoints].sort((a, b) => a - b), edges = [0, ...sp.filter(p => p < SESSION.nTrials), SESSION.nTrials]; return edges.slice(0, -1).map((e, i) => ({ block: i + 1, firstTrial: e + 1, lastTrial: edges[i + 1], mapping: ruleForTrial(e + 1, sp) })); }
+
 // ---- session record --------------------------------------------------------------------------------------------------
 const sess = logger.data.session, pxByCue = ph => Object.fromEntries(CUE.values.map(c => [c, preferredXForCue(c, ph)]));
 sess.experimentConfig = {
   game: 'block-flight', appVersion: APP_VERSION, imagePool: { ids: IMAGES.ids, tutorialIds: TUTORIAL_IMAGES.ids, faceFraction: IMAGES.faceFraction },
   cue: CUE, familiarity: FAMILIARITY, hitStrength: { form: 'baseline + (peak - baseline) * Gh * Gv, G = exp(-d^2 / (2 w^2)); no horizontal cut-off, no penalty', ...EFFECT },
-  colorRule: { reversalAfterTrial: SESSION.reversalAfterTrial, preferredXByCue: { initial: pxByCue('initial'), reversed: pxByCue('reversed') }, preferredYByFamiliarity: { novel: FAMILIARITY.novelPreferredY, familiar: FAMILIARITY.familiarPreferredY } },
+  colorRule: { switchPoints: SESSION.switchPoints, blocks: blockTable(), preferredXByCue: { initial: pxByCue('initial'), reversed: pxByCue('reversed') }, preferredYByFamiliarity: { novel: FAMILIARITY.novelPreferredY, familiar: FAMILIARITY.familiarPreferredY } },
   launch: { ...CONFIG.launch, note: 'impulse applied through the centre of mass; direction away from the camera raised by elevationDeg; forward-tumble angular velocity = pitchSpin x impulse' },
   block: CONFIG.block, platform: CONFIG.platform, settle: CONFIG.settle, gravity: CONFIG.gravity, fixedDt: CONFIG.fixedDt, camera: CONFIG.camera, session: { ...SESSION },
 };
@@ -47,7 +50,7 @@ async function runTrial(meta) {
   Object.assign(game, { sim, cue, familiarity, phase: colorRulePhase, extraClicks: 0, state: 'blank' });
   view.setBlock(images[meta.imageId], colorForCue(cue)); view.setBlockVisible(false); view.sync(sim.body);
   ui.setTrialInfo(meta.label); ui.setHint(null);
-  game.trial = logger.beginTrial({ phase: meta.phase, colorRulePhase, reversalAfterTrial: meta.phase === 'experiment' ? SESSION.reversalAfterTrial : null,
+  game.trial = logger.beginTrial({ phase: meta.phase, colorRulePhase, blockNumber: meta.blockNumber ?? 0, trialInBlock: meta.trialInBlock ?? null, switchPoints: meta.phase === 'experiment' ? [...SESSION.switchPoints] : [],
     image: { imageId: meta.imageId, ...meta.image, plannedRole: meta.planned?.role ?? null, plannedLagTarget: meta.planned?.lagTarget ?? null, plannedFallback: meta.planned?.fallback ?? null },
     cue, colorHex: '#' + colorForCue(cue).toString(16).padStart(6, '0'), optimal: { u: s0.optimalU, v: s0.optimalV }, physics: physicsSnapshot() });
   await sleep(T.blankMs);
@@ -114,13 +117,13 @@ async function runInstructions() {
 async function runExperiment() {
   const seed = SESSION.seed ?? Math.floor(Math.random() * 2 ** 32), spec = { towers: [{ blocks: [{ size: CONFIG.block.size, pos: CONFIG.block.start, image: true, cue: 'random' }] }] };
   const plan = buildPlan({ ...spec, nTrials: SESSION.nTrials, orderMode: 'sequence', imageIds: IMAGES.ids, novelProportion: SESSION.novelProportion, lagChoices: SESSION.lagChoices,
-    cueValues: SESSION.cueValues, cuePolicy: SESSION.cuePolicy, phaseBreakAfter: SESSION.reversalAfterTrial, seed });
+    cueValues: SESSION.cueValues, cuePolicy: SESSION.cuePolicy, phaseBreaks: SESSION.switchPoints, seed });
   sess.plan = { seed, stats: plan.stats, trials: plan.trials.map(t => ({ trialNumber: t.trialNumber, imageId: t.slots[0].imageId, cue: t.slots[0].cue, role: t.slots[0].role, lagTarget: t.slots[0].lagTarget, fallback: t.slots[0].fallback })) };
   logger.persist();
   const hist = new ImageHistory();
   for (const pt of plan.trials) {
     const s = pt.slots[0], { info } = hist.present([s.imageId]);
-    await runTrial({ phase: 'experiment', imageId: s.imageId, image: info[s.imageId], cue: s.cue, colorRulePhase: ruleForTrial(pt.trialNumber, SESSION.reversalAfterTrial), label: `Trial ${pt.trialNumber} / ${plan.trials.length}`, planned: s });
+    await runTrial({ phase: 'experiment', imageId: s.imageId, image: info[s.imageId], cue: s.cue, colorRulePhase: ruleForTrial(pt.trialNumber, SESSION.switchPoints), blockNumber: blockForTrial(pt.trialNumber, SESSION.switchPoints), trialInBlock: trialInBlock(pt.trialNumber, SESSION.switchPoints), label: `Trial ${pt.trialNumber} / ${plan.trials.length}`, planned: s });
   }
 }
 

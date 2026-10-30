@@ -2,8 +2,10 @@
 import { CUE } from './experiment.js';
 
 export const SESSION = {
-  nTrials: 120,                  // number of experimental trials (after the tutorial)
-  reversalAfterTrial: 60,        // the colour -> horizontal rule is mirrored for trials AFTER this one (null = never). The familiarity -> vertical rule never changes.
+  nTrials: 200,                  // number of experimental trials (after the tutorial)
+  // The colour -> horizontal rule flips (original <-> mirrored) after each of these trial numbers: [60, 110, 160] = trials 1-60 original, 61-110 reversed, 111-160 original, 161-200 reversed. [] = never.
+  // The familiarity -> vertical rule never changes. Switches are never announced.
+  switchPoints: [60, 110, 160],
   tutorial: true,
   novelProportion: 0.5,          // share of trials with a first-time picture; the rest are repeats at the lags below
   lagChoices: [1, 2, 3, 5],      // a repeated picture is one that was shown exactly this many trials earlier
@@ -20,11 +22,12 @@ export const SESSION = {
   kiosk: false,                  // true / ?kiosk=1: hide the data-download buttons from the participant (Ctrl+Shift+D still downloads the JSON)
 };
 
-/** URL overrides: ?trials=40&reversal=20 (?reversal=0: never)&seed=7&tutorial=0&novel=0.5&lags=1,2,3,5&kiosk=1&blank=300&observe=2000 */
+/** URL overrides: ?trials=60&switches=20,40 (?switches=0 or empty: never; ?reversal=20 is the same as ?switches=20)&seed=7&tutorial=0&novel=0.5&lags=1,2,3,5&kiosk=1&blank=300&observe=2000 */
 export function applyUrlOverrides(cfg, search = typeof location !== 'undefined' ? location.search : '') {
   const q = new URLSearchParams(search); const num = k => (q.has(k) && q.get(k) !== '' ? Number(q.get(k)) : undefined);
   if (num('trials') !== undefined) cfg.nTrials = num('trials');
-  if (q.has('reversal')) cfg.reversalAfterTrial = Number(q.get('reversal')) > 0 ? Number(q.get('reversal')) : null;
+  if (q.has('switches')) cfg.switchPoints = q.get('switches').split(',').map(Number).filter(x => Number.isFinite(x) && x > 0);
+  if (q.has('reversal')) cfg.switchPoints = Number(q.get('reversal')) > 0 ? [Number(q.get('reversal'))] : [];
   if (num('seed') !== undefined) cfg.seed = num('seed');
   if (q.has('tutorial')) cfg.tutorial = q.get('tutorial') !== '0';
   if (num('novel') !== undefined) cfg.novelProportion = num('novel');
