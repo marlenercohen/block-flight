@@ -12,7 +12,7 @@ const SW = [60, 110, 160].filter(x => x < +nTr), clampv = x => Math.min(1, Math.
 const spec = { towers: [{ blocks: [{ size: [1.2, 1.2, 0.9], pos: [0, 0.6, 2], image: true, cue: 'random' }] }] };
 for (let p = 0; p < +nPart; p++) {
   const rng = mulberry32(+seed0 * 100 + p + 1), gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += rng(); return (u - 3) / Math.sqrt(0.5); };
-  const plan = buildPlan({ ...spec, nTrials: +nTr, orderMode: 'sequence', imageIds: IMAGES.ids, novelProportion: 0.5, lagChoices: [1, 2, 3, 5], cueValues: [0, 0.25, 0.5, 0.75, 1], cuePolicy: 'balanced', phaseBreaks: SW, seed: +seed0 * 100 + p + 1 });
+  const plan = buildPlan({ ...spec, nTrials: +nTr, orderMode: 'sequence', imageIds: IMAGES.ids, novelProportion: 0.5, lagChoices: [1, 2, 3, 5], cueValues: [0, 0.25, 0.5, 0.75, 1], cuePolicy: 'uniform', phaseBreaks: SW, seed: +seed0 * 100 + p + 1 });
   const hist = new ImageHistory(), trials = [], sessionId = `synth${String(p + 1).padStart(2, '0')}${(+seed0).toString(16)}`; let t0 = 5000;
   for (const pt of plan.trials) {
     const s = pt.slots[0], { info } = hist.present([s.imageId]), n = pt.trialNumber, phase = ruleForTrial(n, SW), tib = trialInBlock(n, SW), blk = blockForTrial(n, SW), fam = info[s.imageId].familiarity;

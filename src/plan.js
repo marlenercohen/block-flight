@@ -5,7 +5,7 @@ import { mulberry32, shuffled, pick } from './rng.js';
 
 /**
  * config: { nTrials, towers (array of tower specs), towerOrder (indices into towers), orderMode ('shuffle' | 'sequence'), imageIds (pool), novelProportion (0..1),
- *           lagChoices (array of trial lags for repeated images), cueValues, cuePolicy ('balanced' | 'random'), explicitTrials (optional), phaseBreaks (optional array of trial numbers after which cue/novelty balancing restarts), seed }
+ *           lagChoices (array of trial lags for repeated images), cueValues, cuePolicy ('uniform' = a fresh draw from a continuous uniform distribution on [0, 1] for every trial | 'balanced' = shuffled bag of cueValues | 'random' = random pick from cueValues), explicitTrials (optional), phaseBreaks (optional array of trial numbers after which cue/novelty balancing restarts), seed }
  * explicitTrials[t] = { tower: index, slots: [ { image: 'novel' | 'familiar' | { lag: n } | '<imageId>', cue: number } ... ] }  (slots follow the image blocks of the tower in order;
  * any omitted trial/slot is generated automatically).
  * Returns { trials: [ { trialNumber, towerIndex, slots: [ { blockIndex, imageId, cue, role, lagTarget, fallback } ] } ], stats }.
@@ -41,7 +41,8 @@ export function buildPlan(config) {
     seq.push(bag.shift());
   }
   const hist = new ImageHistory(); const novelQueue = shuffled(imageIds, rng); let cueBag = [];
-  const nextCue = () => { if (cuePolicy === 'random') return pick(cueValues, rng); if (!cueBag.length) cueBag = shuffled(cueValues, rng); return cueBag.pop(); };
+  const cueRng = mulberry32(((config.seed ?? 1) ^ 0x9e3779b9) >>> 0);   // separate stream: the colour draws do not influence which pictures are scheduled
+  const nextCue = () => { if (cuePolicy === 'uniform') return cueRng(); if (cuePolicy === 'random') return pick(cueValues, rng); if (!cueBag.length) cueBag = shuffled(cueValues, rng); return cueBag.pop(); };
   const trials = []; let nNovel = 0, nFamiliar = 0, fallbacks = 0; let pN = 0, pF = 0;   // pN/pF: novel/familiar presentations so far within the current rule phase (the controller below keeps each phase near novelProportion)
   for (let t = 1; t <= nTrials; t++) {
     if ((config.phaseBreaks ?? []).includes(t - 1)) { cueBag = []; pN = 0; pF = 0; }   // balance cues and novel/familiar separately within every block between colour-rule switches

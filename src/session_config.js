@@ -9,7 +9,8 @@ export const SESSION = {
   tutorial: true,
   novelProportion: 0.5,          // share of trials with a first-time picture; the rest are repeats at the lags below
   lagChoices: [1, 2, 3, 5],      // a repeated picture is one that was shown exactly this many trials earlier
-  cueValues: CUE.values, cuePolicy: 'balanced',
+  // colour parameter c in [0, 1] (0 = blue end, 1 = red end): 'uniform' draws a new continuous value for EVERY trial (independent, uniform on [0, 1]); 'balanced' / 'random' use the five values in cueValues
+  cueValues: CUE.values, cuePolicy: 'uniform',
   seed: null,                    // null = random per session (the seed used is logged)
   // timing (ms)
   timing: {
@@ -32,6 +33,7 @@ export function applyUrlOverrides(cfg, search = typeof location !== 'undefined' 
   if (q.has('tutorial')) cfg.tutorial = q.get('tutorial') !== '0';
   if (num('novel') !== undefined) cfg.novelProportion = num('novel');
   if (q.has('lags')) cfg.lagChoices = q.get('lags').split(',').map(Number).filter(Number.isFinite);
+  if (q.has('cues') && ['uniform', 'balanced', 'random'].includes(q.get('cues'))) cfg.cuePolicy = q.get('cues');   // ?cues=balanced restores the five discrete colours
   if (q.has('kiosk')) cfg.kiosk = q.get('kiosk') !== '0';
   if (num('blank') !== undefined) cfg.timing.blankMs = num('blank');
   if (num('maxWait') !== undefined) cfg.timing.maxWaitMs = num('maxWait');

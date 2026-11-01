@@ -51,21 +51,36 @@ ok(outs[mults.indexOf(2.2)].peakHeight > 0.05 && outs[mults.indexOf(1.5)].airbor
 
 console.log('--- 4. trial plan: 200 trials in four blocks (60 / 50 / 50 / 40), image limits, balance');
 const spec = { towers: [{ blocks: [{ size: CONFIG.block.size, pos: CONFIG.block.start, image: true, cue: 'random' }] }] };
-const cfg = { ...spec, nTrials: SESSION.nTrials, orderMode: 'sequence', imageIds: IMAGES.ids, novelProportion: 0.5, lagChoices: SESSION.lagChoices, cueValues: SESSION.cueValues, cuePolicy: 'balanced', phaseBreaks: SESSION.switchPoints };
-ok(SESSION.nTrials === 200 && SESSION.switchPoints.join() === '60,110,160', 'defaults: 200 trials, colour rule switches after trials 60, 110 and 160 (both configurable)');
-let bad = 0, worstNovel = 0.5, worstCue = 0, lags = new Set(), maxD = 0;
+const cfg = { ...spec, nTrials: SESSION.nTrials, orderMode: 'sequence', imageIds: IMAGES.ids, novelProportion: 0.5, lagChoices: SESSION.lagChoices, cueValues: SESSION.cueValues, cuePolicy: SESSION.cuePolicy, phaseBreaks: SESSION.switchPoints };
+ok(SESSION.cuePolicy === 'uniform' && SESSION.nTrials === 200 && SESSION.switchPoints.join() === '60,110,160', 'defaults: continuous uniform colours, 200 trials, colour rule switches after trials 60, 110 and 160 (all configurable)');
+let bad = 0, worstNovel = 0.5, lags = new Set(), maxD = 0; const allCues = [], blockMeans = [], lag1 = [];
 for (let seed = 1; seed <= 60; seed++) { const pl = buildPlan({ ...cfg, seed }); if (pl.trials.length !== 200 || pl.trials.some(t => t.slots.length !== 1)) bad++; try { validatePlan(pl); } catch { bad++; }
   const cnt = {}; for (const t of pl.trials) cnt[t.slots[0].imageId] = (cnt[t.slots[0].imageId] ?? 0) + 1; if (Object.values(cnt).some(n => n > 2)) bad++; maxD = Math.max(maxD, Object.keys(cnt).length);
-  for (let k = 0; k < 4; k++) { let nv = 0, fm = 0; const cc = {}; for (const t of pl.trials.filter(x => blockForTrial(x.trialNumber, SESSION.switchPoints) === k + 1)) { const s = t.slots[0]; if (s.expected.familiarity === 'novel') nv++; else { fm++; lags.add(s.expected.lagTrials); } cc[s.cue] = (cc[s.cue] ?? 0) + 1; }
-    const sh = nv / (nv + fm); if (nv + fm !== [60, 50, 50, 40][k]) bad++; if (Math.abs(sh - 0.5) > Math.abs(worstNovel - 0.5)) worstNovel = sh; const c = Object.values(cc); if (c.length !== 5) bad++; worstCue = Math.max(worstCue, (Math.max(...c) - Math.min(...c)) / (c.reduce((x, y) => x + y) / 5)); } }
+  const cs = pl.trials.map(x => x.slots[0].cue); allCues.push(...cs); { const m = cs.reduce((x, y) => x + y) / cs.length; let num = 0, den = 0; for (let i = 0; i < cs.length; i++) { den += (cs[i] - m) ** 2; if (i) num += (cs[i] - m) * (cs[i - 1] - m); } lag1.push(num / den); }
+  for (let k = 0; k < 4; k++) { let nv = 0, fm = 0, cm = 0; for (const t of pl.trials.filter(x => blockForTrial(x.trialNumber, SESSION.switchPoints) === k + 1)) { const s = t.slots[0]; if (s.expected.familiarity === 'novel') nv++; else { fm++; lags.add(s.expected.lagTrials); } cm += s.cue; }
+    const sh = nv / (nv + fm); if (nv + fm !== [60, 50, 50, 40][k]) bad++; if (Math.abs(sh - 0.5) > Math.abs(worstNovel - 0.5)) worstNovel = sh; blockMeans.push(cm / (nv + fm)); } }
 ok(bad === 0, '60 seeds: always 200 trials (blocks of 60 / 50 / 50 / 40) with one block each, every image at most twice, validatePlan passes');
 ok(worstNovel > 0.34 && worstNovel < 0.66, `novel share near 50% within every block (worst block over 60 seeds: ${(100 * worstNovel).toFixed(1)}%)`);
-ok(worstCue < 0.45, `five colour cues used in every block and balanced (largest max-min spread ${(100 * worstCue).toFixed(0)}% of the mean count; 8-12 per cue)`);
+{ const n = allCues.length, bins = Array(10).fill(0); allCues.forEach(c => { bins[Math.min(9, Math.floor(c * 10))]++; }); const chi = bins.reduce((s, o) => s + (o - n / 10) ** 2 / (n / 10), 0), mean = allCues.reduce((x, y) => x + y) / n, sd = Math.sqrt(allCues.reduce((s, c) => s + (c - mean) ** 2, 0) / n);
+  ok(allCues.every(c => c >= 0 && c <= 1) && new Set(allCues.map(c => c.toFixed(6))).size > 0.99 * n, `colour parameter: continuous values in [0, 1], a new draw on every trial (${new Set(allCues.map(c => c.toFixed(6))).size} distinct values among ${n} trials; none of them are restricted to a few set values)`);
+  ok(chi < 27.9 && Math.abs(mean - 0.5) < 0.01 && Math.abs(sd - Math.sqrt(1 / 12)) < 0.01, `colour draws are uniform: 10-bin chi-square ${chi.toFixed(1)} (critical value 27.9 at p = .001), mean ${mean.toFixed(3)} (0.5), sd ${sd.toFixed(3)} (0.289)`);
+  ok(Math.abs(lag1.reduce((x, y) => x + y) / lag1.length) < 0.02 && blockMeans.every(m => m > 0.3 && m < 0.7), `draws are independent across trials (mean lag-1 autocorrelation ${(lag1.reduce((x, y) => x + y) / lag1.length).toFixed(3)}) and no block is lopsided (block means ${Math.min(...blockMeans).toFixed(2)}-${Math.max(...blockMeans).toFixed(2)})`); }
 ok(lags.size === 4 && [...lags].every(l => [1, 2, 3, 5].includes(l)), `repetition lags are exactly 1, 2, 3, 5 (${[...lags].sort((a, b) => a - b)})`);
 ok(maxD < IMAGES.ids.length - 10 && !IMAGES.ids.some(id => TUTORIAL_IMAGES.ids.includes(id)), `image pool (${IMAGES.ids.length}) is large enough (up to ${maxD} distinct pictures in a 200-trial session) and separate from the ${TUTORIAL_IMAGES.ids.length} practice pictures`);
 const mk = () => ({ ...SESSION, timing: { ...SESSION.timing } }), q = applyUrlOverrides(mk(), '?trials=40&switches=10,20,30&seed=7&tutorial=0&lags=1,2');
 ok(q.nTrials === 40 && q.switchPoints.join() === '10,20,30' && q.seed === 7 && q.tutorial === false && q.lagChoices.join() === '1,2', 'URL overrides: trials, switches, seed, tutorial, lags');
 ok(applyUrlOverrides(mk(), '?reversal=15').switchPoints.join() === '15' && applyUrlOverrides(mk(), '?reversal=0').switchPoints.length === 0 && applyUrlOverrides(mk(), '?switches=').switchPoints.length === 0, '?reversal=N is one switch; ?reversal=0 or an empty ?switches= means never');
+
+console.log('--- 4b. continuous colour -> continuous correct horizontal position');
+{ let maxDev = 0, maxDevR = 0, gOK = true, monoColor = true, prev = null; const distinct = new Set();
+  for (let i = 0; i <= 1000; i++) { const c = i / 1000; maxDev = Math.max(maxDev, Math.abs(preferredXForCue(c, 'initial') - (0.2 + 0.6 * c))); maxDevR = Math.max(maxDevR, Math.abs(preferredXForCue(c, 'reversed') - (0.8 - 0.6 * c)));
+    const h = hitStrength({ cue: c, familiarity: 'novel', u: preferredXForCue(c, i % 2 ? 'initial' : 'reversed'), v: 0, phase: i % 2 ? 'initial' : 'reversed' }); if (Math.abs(h.gH - 1) > 1e-12 || Math.abs(h.multiplier - 2.2) > 1e-9 || Math.abs(h.horizontalError) > 1e-12) gOK = false; distinct.add(colorForCue(c)); }
+  ok(maxDev < 1e-12 && maxDevR < 1e-12, 'correct horizontal position is exactly linear in the colour parameter: 0.2 + 0.6 c (original), 0.8 - 0.6 c (mirrored), for 1001 values of c');
+  ok(near(preferredXForCue(0, 'initial'), 0.2) && near(preferredXForCue(0.5, 'initial'), 0.5) && near(preferredXForCue(1, 'initial'), 0.8) && near(preferredXForCue(0, 'reversed'), 0.8) && near(preferredXForCue(0.5, 'reversed'), 0.5) && near(preferredXForCue(1, 'reversed'), 0.2), 'endpoints and midpoint behave exactly as before in both mappings (0.2 / 0.5 / 0.8 and mirrored)');
+  ok(gOK, 'for every sampled colour, clicking at that colour\'s own correct position gives zero horizontal error, Gh = 1 and the maximum multiplier 2.2 (also with the mirrored mapping)');
+  { const c = 0.37, u = 0.45; const h = hitStrength({ cue: c, familiarity: 'novel', u, v: 0, phase: 'initial' }), exp = Math.exp(-((u - 0.422) ** 2) / (2 * 0.15 * 0.15)); ok(near(h.optimalU, 0.422) && near(h.horizontalError, 0.028) && near(h.gH, exp, 1e-12), 'horizontal contribution depends on the distance to the correct position for THAT colour (c = 0.37 -> 0.422; click 0.45 -> error 0.028, Gh ' + h.gH.toFixed(4) + ')'); }
+  let maxStep = 0; for (let i = 1; i <= 1000; i++) { const a = colorForCue((i - 1) / 1000), b = colorForCue(i / 1000); maxStep = Math.max(maxStep, Math.abs((a >> 16) - (b >> 16)), Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)), Math.abs((a & 255) - (b & 255))); }
+  ok(distinct.size > 300 && maxStep <= 1, `colour rendering is smooth: ${distinct.size} distinct 8-bit display colours along the blue-to-red range (the display limit), neighbouring parameter values differ by at most ${maxStep} RGB step`); }
 
 console.log('--- 5. instructions');
 const all = [INTRO_CARD, ...TUTORIAL_STEPS].map(s => s.text).join('\n');

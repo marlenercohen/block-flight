@@ -34,7 +34,7 @@ const sess = logger.data.session, pxByCue = ph => Object.fromEntries(CUE.values.
 sess.experimentConfig = {
   game: 'block-flight', appVersion: APP_VERSION, imagePool: { ids: IMAGES.ids, tutorialIds: TUTORIAL_IMAGES.ids, faceFraction: IMAGES.faceFraction },
   cue: CUE, familiarity: FAMILIARITY, hitStrength: { form: 'baseline + (peak - baseline) * Gh * Gv, G = exp(-d^2 / (2 w^2)); no horizontal cut-off, no penalty', ...EFFECT },
-  colorRule: { switchPoints: SESSION.switchPoints, blocks: blockTable(), preferredXByCue: { initial: pxByCue('initial'), reversed: pxByCue('reversed') }, preferredYByFamiliarity: { novel: FAMILIARITY.novelPreferredY, familiar: FAMILIARITY.familiarPreferredY } },
+  colorRule: { switchPoints: SESSION.switchPoints, blocks: blockTable(), cuePolicy: SESSION.cuePolicy, cueRange: [0, 1], preferredX: 'continuous and linear in the colour parameter c: initial 0.2 + 0.6 c, mirrored 0.8 - 0.6 c (c = 0 blue end, 1 red end)', preferredXByCue: { initial: pxByCue('initial'), reversed: pxByCue('reversed') }, preferredYByFamiliarity: { novel: FAMILIARITY.novelPreferredY, familiar: FAMILIARITY.familiarPreferredY } },
   launch: { ...CONFIG.launch, note: 'impulse applied through the centre of mass; direction away from the camera raised by elevationDeg; forward-tumble angular velocity = pitchSpin x impulse' },
   block: CONFIG.block, platform: CONFIG.platform, settle: CONFIG.settle, gravity: CONFIG.gravity, fixedDt: CONFIG.fixedDt, camera: CONFIG.camera, session: { ...SESSION },
 };

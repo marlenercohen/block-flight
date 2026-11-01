@@ -2,7 +2,7 @@ function [T, info] = bf_load_sessions(files)
 % Read Block Flight JSON logs (schema blockflight-log/1) into one table with a row per EXPERIMENTAL trial in which the participant clicked.
 % Practice trials and trials without a click (result 'no_click') are not in T; their counts are in info.
 %   T columns: participant (1..K, one per file), trial, block, trialInBlock, rule (0 original colour mapping, 1 mirrored), familiarity (0 novel, 1 familiar), lag (NaN for novel),
-%              cue, u, v (click position on the picture face), signedH, signedV (click - optimum), absH, absV (|error|; absV = distance from the correct edge),
+%              cue (colour parameter, 0..1, continuous), optimalU, optimalV (correct click position for this trial's colour / mapping / familiarity), u, v (click position on the picture face), signedH, signedV (click - optimum), absH, absV (|error|; absV = distance from the correct edge),
 %              correctHalf (1 = click in the correct vertical half for this familiarity, 0 = wrong half), rtMs, multiplier, distance (metres travelled away from the camera)
 if ischar(files) || isstring(files), files = cellstr(files); end
 rows = {}; info = struct('file', {}, 'sessionId', {}, 'nExperimental', {}, 'nClicked', {}, 'nNoClick', {}, 'switchPoints', {}, 'nPractice', {});
@@ -25,11 +25,11 @@ for k = 1:numel(files)
         if c.v == 0.5, correct = NaN; end
         rule = double(strcmp(t.colorRulePhase, 'reversed'));
         rows(end+1, :) = {k, t.trialNumber, blockNo, tib, rule, double(fam), lag, t.cue, c.u, c.v, ...
-            c.horizontalError, c.verticalError, c.absHorizontalError, c.absVerticalError, correct, c.reactionTimeMs, c.multiplier, num(t, 'outcome', 'distanceAway')}; %#ok<AGROW>
+            c.horizontalError, c.verticalError, c.absHorizontalError, c.absVerticalError, correct, c.reactionTimeMs, c.multiplier, num(t, 'outcome', 'distanceAway'), c.optimalU, c.optimalV}; %#ok<AGROW>
     end
     info(k).file = files{k}; info(k).sessionId = S.session.sessionId; info(k).nExperimental = nExp; info(k).nClicked = nClick; info(k).nNoClick = nNo; info(k).switchPoints = sp; info(k).nPractice = nPrac;
 end
-names = {'participant','trial','block','trialInBlock','rule','familiarity','lag','cue','u','v','signedH','signedV','absH','absV','correctHalf','rtMs','multiplier','distance'};
+names = {'participant','trial','block','trialInBlock','rule','familiarity','lag','cue','u','v','signedH','signedV','absH','absV','correctHalf','rtMs','multiplier','distance','optimalU','optimalV'};
 if isempty(rows), T = cell2table(cell(0, numel(names)), 'VariableNames', names); else, T = cell2table(rows, 'VariableNames', names); end
 T = sortrows(T, {'participant', 'trial'});
 end

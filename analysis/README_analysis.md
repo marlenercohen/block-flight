@@ -34,5 +34,8 @@ Settings (smoothing windows, minimum trials, what counts as "early / late", reac
 ## Data columns used (JSON schema `blockflight-log/1`)
 Experimental trials with a click: `click.absHorizontalError`, `click.absVerticalError` (distance from the correct edge; in logs from before the edge change it is the distance from 0.2 / 0.8, but the correct-half measure only uses `click.v` and is unaffected), `click.u`, `click.v`, `click.reactionTimeMs`, `image.familiarity`, `image.lagTrials`, `cue`, `colorRulePhase`, `blockNumber`, `trialInBlock`, `switchPoints`, `outcome.distanceAway`. Older logs without `blockNumber` / `switchPoints` are handled by deriving blocks from changes in `colorRulePhase`. Practice trials and trials without a click are counted but excluded.
 
+## Colour parameter
+The game now draws the colour parameter `cue` (0 = blue end, 1 = red end) from a continuous uniform distribution on every trial; older logs (including the first pilot) used five set values. The logs contain the actual value (`cue`), the correct horizontal position for that value and mapping (`click.optimalU` = 0.2 + 0.6 c, or 0.8 - 0.6 c in mirrored blocks) and the signed / absolute errors. The analysis uses the logged errors, and the report prints an integrity check that recomputes the correct position from `cue` and the mapping, so both log formats work.
+
 ## Test data
 `node analysis/synthetic/make_synthetic_session.mjs <folder> 3 200 1` writes simulated sessions (clearly marked synthetic) in the real format, with built-in learning and an attention trade-off, to try the code.
